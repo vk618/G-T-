@@ -1,0 +1,146 @@
+---
+title: "G&T Results"
+author: "Vijayalakshmi Kokku"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: 
+      bootswatch: quartz
+---
+# About the datasets:
+This data comes from NYC parents reporting their children's gifted and talented exam scores, as well as school preferences, which include OLSAT and NNAT scores in both raw and percentage format, as well as overall scores, to predict how many children entering new grade levels will be assigned to good schools based on their performance according to district and birthmonth.
+
+### Loading the required libraries 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(knitr)
+library(bslib)
+library(readxl)
+```
+
+### Retriving the downloaded data
+```{r, include=TRUE}
+GT17 <- read_excel("D:\\McDaniel College\\ANA 515\\G&T results\\Copy of G&T Results 2017-18 (Responses) - Form Responses 1.xlsx") %>%
+  mutate(Timestamp = as.Date(Timestamp, format = "%d %M %Y")) #Restricting to date only
+  
+GT18 <- read_excel("D:\\McDaniel College\\ANA 515\\G&T results\\Copy of G&T Results 2018-19 Responses - Sheet1.xlsx") %>%
+  select(-c(...13, ...14)) #Removed unnecessary columns
+```
+
+### Combining the two data frames into one
+```{r GT, echo=TRUE}
+GT <- rbind(GT17, GT18)
+GT %>% dim
+names(GT)
+```
+
+### Removing spaces from all the variable names to make it easy to access
+```{r, echo=TRUE}
+names(GT) <- gsub(" ","",names(GT))
+names(GT)
+```
+
+### Editing the 'Timestamp' column by removing outliers and formatting the dates
+```{r , echo=TRUE}
+GT <- GT %>%
+  rename(Date = Timestamp) %>%
+  filter(Date >= "2017-01-01") %>%
+  filter(Date <= "2018-12-31") %>%
+  mutate(Date = format(Date, format = "%d %B %Y"))
+view(GT)
+```
+
+### Cleaning the 'EnteringGradeLevel' column
+```{r, echo=TRUE}
+GT <- GT %>% 
+  mutate(EnteringGradeLevel = ifelse(EnteringGradeLevel == 'first',"1",ifelse(EnteringGradeLevel == 'second', "2",ifelse(EnteringGradeLevel == 'third', "3",ifelse(EnteringGradeLevel == 'k'|EnteringGradeLevel == 'kinder'|EnteringGradeLevel == 'Kinder'|EnteringGradeLevel == 'kindergarten'|EnteringGradeLevel == 'Kindergarten', "K",EnteringGradeLevel)))))
+View(GT)
+```
+
+### Cleaning the 'Birthmonth' column
+```{r, echo=TRUE}
+GT <- GT %>% 
+  mutate(BirthMonth = ifelse(BirthMonth == '2', "February", ifelse(BirthMonth == '8', "August", ifelse(BirthMonth == 'september', "September", ifelse(BirthMonth == '11', "November", ifelse(BirthMonth == '12', "December", BirthMonth))))))
+View(GT)
+```
+
+### Cleaning the 'OLSATVerbalScore' column
+The OLSAT scores were calculated on a scale of 30. Some of the values had a symbol with 30 points to denote the scores, while others had percentage scores. So I used gsub() to remove the symbols, convert them to numeric values, and a simple logic to normalize all of the values.
+```{r, echo=TRUE}
+GT$OLSATVerbalScore <- gsub("/30", "", as.character(GT$OLSATVerbalScore))
+GT$OLSATVerbalScore = as.numeric(as.character(GT$OLSATVerbalScore))
+GT <- GT %>%
+  mutate(OLSATVerbalScore = ifelse(OLSATVerbalScore == 'Fill out later', 0, OLSATVerbalScore)) %>%
+  mutate(OLSATVerbalScore = ifelse(OLSATVerbalScore > 30 | OLSATVerbalScore < 1, round(OLSATVerbalScore * 0.3), OLSATVerbalScore))   
+View(GT)
+```
+### Cleaning the 'OLSATVerbalPercentile' column 
+```{r, echo=TRUE}
+GT <- GT %>% 
+  mutate(OLSATVerbalPercentile = ifelse(OLSATVerbalPercentile == '~70', "70",ifelse(OLSATVerbalPercentile == '0.91' | OLSATVerbalPercentile == '91%', "91", OLSATVerbalPercentile)))
+GT$OLSATVerbalPercentile = as.numeric(as.character(GT$OLSATVerbalPercentile))
+View(GT)
+```
+### Cleaning the 'NNATNonVerbalRawScore' column
+The NNAT Non Verbal scores were computed on a scale of 50. It contains some symbols and percentage values, similar to the OLSATVerbalScore column. I corrected it using the same methods.
+```{r, echo=TRUE}
+GT$NNATNonVerbalRawScore <- gsub("/48", "", as.character(GT$NNATNonVerbalRawScore))
+GT$NNATNonVerbalRawScore <- gsub("/50", "", as.character(GT$NNATNonVerbalRawScore))
+GT$NNATNonVerbalRawScore = as.numeric(as.character(GT$NNATNonVerbalRawScore))
+GT <- GT %>%
+  mutate(NNATNonVerbalRawScore = ifelse(NNATNonVerbalRawScore == 'Fill out later', 0, NNATNonVerbalRawScore)) %>%
+  mutate(NNATNonVerbalRawScore = ifelse(NNATNonVerbalRawScore > 50 | NNATNonVerbalRawScore < 1, round(NNATNonVerbalRawScore * 0.5), NNATNonVerbalRawScore))  
+View(GT)
+```
+### Cleaning the 'NNATNonVerbalPercentile' column
+```{r, echo=TRUE}
+GT <- GT %>% 
+  mutate(NNATNonVerbalPercentile = ifelse(NNATNonVerbalPercentile == '0.71' | NNATNonVerbalPercentile == '71%', "71", ifelse(NNATNonVerbalPercentile == '0.98' | NNATNonVerbalPercentile == '98%', "98", ifelse(NNATNonVerbalPercentile == '0.99' | NNATNonVerbalPercentile == '99%', "99", NNATNonVerbalPercentile))))
+GT$NNATNonVerbalPercentile = as.numeric(as.character(GT$NNATNonVerbalPercentile))
+View(GT)
+```
+### Removing all the missing values from the dataset
+```{r, echo=TRUE}
+GT <- na.omit(GT)
+View(GT)
+```
+
+# Visualizations
+
+### NYC Kids entering new level
+```{r grade, echo=FALSE}
+GT %>% ggplot(aes(x = EnteringGradeLevel, color = EnteringGradeLevel, fill= EnteringGradeLevel)) + geom_bar(width = 0.6, position = "dodge") + labs(title = "NYC Kids entering new level", x = "Grade Level")
+```
+
+
+### NYC Kids birth month
+```{r month, echo=FALSE}
+GT %>% ggplot(aes(y = BirthMonth, color = BirthMonth, fill= BirthMonth)) + geom_bar(width = 0.6, position = "dodge") + labs(title = "NYC Kids birth month", x = "Birth Month")
+```
+
+
+### Overall scores of Kids entering grade level
+```{r scores, echo=FALSE}
+plotGT <- ggplot(GT, aes(x = OverallScore, y = EnteringGradeLevel)) + 
+  geom_point(aes(color = EnteringGradeLevel)) +
+  labs(title = "Overall scores of Kids entering grade level",
+       x = "Results", 
+       y = "Grade levels")
+plotGT
+```
+
+
+### District wise NNAT results
+```{r district, echo=FALSE}
+NNATGT <- ggplot(GT, aes(x = District, y = NNATNonVerbalPercentile)) + 
+  geom_point(aes(color = District)) +
+  labs(title = "District wise NNAT results",
+       x = "District", 
+       y = "NNAT Results")
+NNATGT
+```
+
+
+
+
